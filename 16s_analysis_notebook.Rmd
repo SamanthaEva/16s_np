@@ -1,0 +1,56 @@
+---
+title: "16s Nanopore"
+output: html_notebook
+bibliography: references.bib
+---
+Three different environmental samples were 
+
+### Poretools
+Poretools [@Loman2014] is used to extract the fastq sequences for each barcode. We will only extract the 2D sequences and use for downstream analysis. Only three barcodes have been used but files have been separated in more folders.
+```{bash}
+for FOLDER in data/pass/*
+do
+  BARCODE=$( echo $FOLDER | cut -d'/' -f3 )
+  poretools fastq --type 2D $FOLDER > ${BARCODE}.fastq
+done
+```
+
+Next we are doing some basic QC of the data. First we check the number of reads in each library and the read length distribution of the sequences. Since it is the 16s gene that was sequenced, the anticipated read length should be ~1600bp. A python scrip
+```{bash}
+for FOLDER in data/pass/*
+do
+  BARCODE=$( echo $FOLDER | cut -d'/' -f3 )
+  cat ${BARCODE}.fastq | awk '{if(NR%4==2){print length($0)}}' > ${BARCODE}.statistics.csv
+done
+```
+Then we read all the data  into R and visualize it.
+```{r message=FALSE}
+library(reshape)
+barcodes <- c("NB01", "NB02", "NB03")
+statFiles <- paste0(barcodes, '.statistics.csv')
+statData <- lapply(statFiles, read.csv)
+names(statData) <- barcodes
+statPlot <- melt(statData)
+statPlot$variable <- NULL
+colnames(statPlot) <- c("ReadLength", "Barcode")
+```
+Number of reads and sequencing output for each barcode
+```{r}
+library(ggplot2)
+ggplot(statPlot, aes(Barcode, fill=Barcode)) + 
+  geom_bar(stat = "count") +
+  ylab("Sequences") +
+  ggtitle("Library size")
+```
+Read length histograms
+```{r}
+ggplot(statPlot, aes(x=ReadLength, fill=Barcode)) +
+  geom_histogram(binwidth = 20) +
+  xlab("Read Length") +
+  ylab("Sequences") +
+  ggtitle("Read Length distributions")
+```
+All libraries have a peak at 1600bp.
+
+## Qiime
+# References
