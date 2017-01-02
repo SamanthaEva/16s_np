@@ -53,4 +53,83 @@ ggplot(statPlot, aes(x=ReadLength, fill=Barcode)) +
 All libraries have a peak at 1600bp.
 
 ## Qiime
+First step is to prepare the data to be used in qiime. The fastq-files are converted to fasta, and the header in all files are changed. Next all fasta-files are merged to a single file that is used as input in qiime
+```{bash}
+for BARCODE in NB01 NB02 NB03
+do
+  awk 'NR % 4 == 1 {print ">" $0 } NR % 4 == 2 {print $0}' ${BARCODE}.fastq > ${BARCODE}.fasta
+  python ren_fasta.py ${BARCODE}.fasta ${BARCODE} ${BARCODE}_ren.fasta
+done
+
+cat NB01_ren.fasta NB02_ren.fasta NB03_ren.fasta > NB_ren.fasta
+```
+When this is done we can start run the closed otu picking pipeline in qiime. The SILVA rRNA-database is used for reference. The pick is done at 80%, 90%, and 97% percentage identity (PID)
+```{bash}
+for  in 80 90 97
+do
+pick_closed_reference_otus.py -r /mnt/powervault/moaham/QIIME/SILVA123_QIIME_release/rep_set/rep_set_16S_only/${PID}/${PID}_otus_16S.fasta -p parameter_file_silva_${PPID}.txt -t /mnt/powervault/moaham/QIIME/SILVA123_QIIME_release/taxonomy/16S_only/${PID}/taxonomy_all_levels.txt -aO 20 -o Closed_OTU_picking_Nanopore_${PID} -i NB_ren.fasta
+summarize_taxa_through_plots.py -i Closed_OTU_picking_Nanopore_${PID}/otu_table.biom -o Closed_OTU_picking_Nanopore_${PID}/taxa_summary
+done
+```
+We can plot the output for the 
+```{R}
+library(ggplot2)
+library(reshape)
+otu_table <- read.table("Closed_OTU_picking_Nanopore_80/taxa_summary/otu_table_L2.txt", header=TRUE, sep="\t")
+otu_table$OTU.ID <- unlist(lapply(strsplit(as.character(otu_table$OTU.ID), split = "__"), "[", 3))
+otu_plot_data <- melt(otu_table, id="OTU.ID")
+colnames(otu_plot_data) <- c("Genus", "Sample", "Abundance")
+ggplot(otu_plot_data, aes(x=Sample, y=Abundance, fill=Genus)) +
+  geom_bar(stat = "identity") +
+  ggtitle("OTU picking  SILVA 80%")
+```
+```{R}
+otu_table <- read.table("Closed_OTU_picking_gg_79/Taxa_summary_n2/otu_table_n2_L2.txt", header=TRUE, sep="\t")
+otu_table$OTU.ID <- unlist(lapply(strsplit(as.character(otu_table$OTU.ID), split = "__"), "[", 3))
+otu_plot_data <- melt(otu_table, id="OTU.ID")
+colnames(otu_plot_data) <- c("Genus", "Sample", "Abundance")
+otu_plot_data <- otu_plot_data[order(as.character(otu_plot_data$Sample)),]
+ggplot(otu_plot_data, aes(x=Sample, y=Abundance, fill=Genus)) +
+  geom_bar(stat = "identity") +
+  ggtitle("OTU picking GreneGenes 79%")
+```
+```{R}
+otu_table <- read.table("Closed_OTU_picking_Nanopore_90/taxa_summary/otu_table_L2.txt", header=TRUE, sep="\t")
+otu_table$OTU.ID <- unlist(lapply(strsplit(as.character(otu_table$OTU.ID), split = "__"), "[", 3))
+otu_plot_data <- melt(otu_table, id="OTU.ID")
+colnames(otu_plot_data) <- c("Genus", "Sample", "Abundance")
+ggplot(otu_plot_data, aes(x=Sample, y=Abundance, fill=Genus)) +
+  geom_bar(stat = "identity") +
+  ggtitle("OTU picking SILVA 90%")
+```
+## Kraken
+```{bash}
+
+```
+
+```{r}
+library(dplyr)
+kraken_table_1 <- read.table("NB01_ren.phylum.output", sep = '\t')
+kraken_table_2 <- read.table("NB02_ren.phylum.output", sep = '\t')
+kraken_table_3 <- read.table("NB03_ren.phylum.output", sep = '\t')
+keeps <- c("V2", "V6")
+kraken_table_1 <- kraken_table_1[keeps]
+kraken_table_2 <- kraken_table_2[keeps]
+kraken_table_3 <- kraken_table_3[keeps]
+colnames(kraken_table_1) <- c("Abundance", "Phylum")
+colnames(kraken_table_2) <- c("Abundance", "Phylum")
+colnames(kraken_table_3) <- c("Abundance", "Phylum")
+kraken_table_1 <- filter(kraken_table_1, Abundance > 20)
+kraken_table_2 <- filter(kraken_table_2, Abundance > 20)
+kraken_table_3 <- filter(kraken_table_3, Abundance > 20)
+kraken_table_1$Percentage <- as.numeric(kraken_table_1$Abundance/sum(kraken_table_1$Abundance))
+kraken_table_2$Percentage <- as.numeric(kraken_table_2$Abundance/sum(kraken_table_2$Abundance))
+kraken_table_3$Percentage <- as.numeric(kraken_table_3$Abundance/sum(kraken_table_3$Abundance))
+kraken_table_1$Sample <- c("NB01")
+kraken_table_2$Sample <- c("NB02")
+kraken_table_3$Sample <- c("NB03")
+kraken_table <- rbind(kraken_table_1, kraken_table_2, kraken_table_3)
+ggplot(kraken_table, aes(x=Sample, y=Percentage, fill=Phylum)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
 # References
