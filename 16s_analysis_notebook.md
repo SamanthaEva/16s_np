@@ -1,6 +1,12 @@
 16s Nanopore
 ================
 
+-   [MinION Sequencing](#minion-sequencing)
+-   [Poretools](#poretools)
+-   [16S-analysis](#s-analysis)
+    -   [Looking at species level](#looking-at-species-level)
+-   [References](#references)
+
 Three different environmental samples were sequenced with both MinION and Illumina. For the MinION-sequencing, the complete 16S region was amplified and barcodes were ligated to the different samples. The samples were pooled and run on a single R9 flowcell. The Metrichor Basecalling servie divide the reads into one folder for each barcode that was used. For the Illumina-sequencing the V4 region were amplified using the 5151f/806r primers and sequenced. How does the barcoding work. What methods can be used to analyse complete 16S data from nanopore. Do theese method give similar results to the Illumina data.
 
 ### MinION Sequencing
@@ -169,7 +175,7 @@ get_kraken_table <- function(x){
   kraken_table <- read.table(table_path, sep = '\t')
   keeps <- c("V2", "V6")
   kraken_table <- kraken_table[keeps]
-  colnames(kraken_table) <- c("Abundance", "Phylum")
+  colnames(kraken_table) <- c("Abundance", "Taxa")
   print(paste(sample, sum(kraken_table$Abundance)))
   kraken_table$Percentage <- as.numeric(kraken_table$Abundance/sum(kraken_table$Abundance))
   kraken_table <- filter(kraken_table, Percentage > read_filter)
@@ -183,7 +189,7 @@ get_kraken_table <- function(x){
 taxa_plot <- function(x){
   kraken_tables <- apply(x, MARGIN = 1, get_kraken_table)
   kraken_table <- do.call("rbind", kraken_tables)
-  g <- ggplot(kraken_table, aes(x=Sample, y=Percentage, fill=Phylum)) +
+  g <- ggplot(kraken_table, aes(x=Sample, y=Percentage, fill=Taxa)) +
         geom_bar(stat = "identity") +
         ggtitle("Kraken")
   return(g)
@@ -212,7 +218,18 @@ taxa_plot(m)
 
 ![](16s_analysis_notebook_files/figure-markdown_github/unnamed-chunk-15-1.png) For NB01 and NB02 there is an inrcreased proportion of protobacteria in the nanopore samples. This is not true for the NB03 sample, instead both the Fusobacteria and the Protobacteria are lower abundant. In the text area, we can se how many reads that could be sorted at this order for the different samples. Kraken can assign more reads to a phylum compared to QIIMME.
 
-### Looking at higher orders, genus and species
+### Looking at species level
+
+First we extract all speices that has been found in the nanopore and illumina data using kraken
+
+``` bash
+for BARCODE in NB01 NB02 NB03 NB01_BV85 NB02_XNy22 NB03_XNy50
+do
+awk '$4=="S" {print $0}' ${BARCODE}.report > ${BARCODE}.species.report
+done
+```
+
+Read the kraken reports in to R
 
 ``` r
 NB01.np = matrix(data=c("NB01_ren.species.output", "NB01_np", 0.001), ncol = 3)
@@ -246,24 +263,83 @@ NB02.illmn.species <- get_kraken_table(NB02.illmn)
     ## [1] "NB02_illmn 29580"
     ## [1] "NB02_illmn 27290"
 
-``` r
-NB03.np = matrix(data=c("NB03_ren.species.output", "NB03_np", 0.01), ncol = 3)
-NB03.np.species <- get_kraken_table(NB03.np)
-```
-
-    ## Warning in scan(file = file, what = what, sep = sep, quote = quote, dec =
-    ## dec, : EOF within quoted string
-
-    ## [1] "NB03_np 708"
-    ## [1] "NB03_np 655"
+Can we find an addition of species in NB02, compared to NB02
 
 ``` r
-NB03.illmn = matrix(data=c("NB03_XNy50.species.report", "NB03_illmn", 0.01), ncol = 3)
-NB03.illmn.species <- get_kraken_table(NB03.illmn)
+differential_species <- as.data.frame(setdiff(NB01.np.species$Taxa, NB02.np.species$Taxa))
+colnames(differential_species) <- c("Taxa")
+NB01.np.diff <- inner_join(NB01.np.species, differential_species)
+print(NB02.np.diff)
 ```
 
-    ## [1] "NB03_illmn 6662"
-    ## [1] "NB03_illmn 6161"
+    ##    Abundance                                                     Taxa
+    ## 1         16                                    Amphibacillus xylanus
+    ## 2         15                            Gallionella capsiferriformans
+    ## 3         12                           Candidatus Babela massiliensis
+    ## 4         11                                     Leptothrix cholodnii
+    ## 5         11                                        Coxiella burnetii
+    ## 6         11                                   Wolinella succinogenes
+    ## 7          8                                    Sphingobium sp. SYK-6
+    ## 8          8                                 Flavobacterium columnare
+    ## 9          8                                          Opitutus terrae
+    ## 10         7                                   Rubrivivax gelatinosus
+    ## 11         7                          Novosphingobium aromaticivorans
+    ## 12         7                                      Acholeplasma palmae
+    ## 13         6                                      Pandoraea sp. RB-44
+    ## 14         6                                  Rhodobacter sphaeroides
+    ## 15         6                                    Sanguibacter keddieii
+    ## 16         5                           Candidatus Profftella armatura
+    ## 17         5                                    Dichelobacter nodosus
+    ## 18         5                                        Geobacter lovleyi
+    ## 19         5                                   Sinorhizobium meliloti
+    ## 20         5                                           Leifsonia xyli
+    ## 21         5                                    Thermobispora bispora
+    ## 22         5                     uncultured Termite group 1 bacterium
+    ## 23         4               Candidatus Kinetoplastibacterium crithidii
+    ## 24         4                            Halothiobacillus neapolitanus
+    ## 25         4                                  Acinetobacter baumannii
+    ## 26         4                               Bdellovibrio bacteriovorus
+    ## 27         4                                    Bdellovibrio exovorus
+    ## 28         4                                Asticcacaulis excentricus
+    ## 29         4                                      Fibrella aestuarina
+    ## 30         4                              Haliscomenobacter hydrossis
+    ## 31         4                                        Bacillus subtilis
+    ## 32         4                                Planctomyces brasiliensis
+    ## 33         4                                        Pirellula staleyi
+    ##     Percentage  Sample
+    ## 1  0.004295302 NB02_np
+    ## 2  0.004026846 NB02_np
+    ## 3  0.003221477 NB02_np
+    ## 4  0.002953020 NB02_np
+    ## 5  0.002953020 NB02_np
+    ## 6  0.002953020 NB02_np
+    ## 7  0.002147651 NB02_np
+    ## 8  0.002147651 NB02_np
+    ## 9  0.002147651 NB02_np
+    ## 10 0.001879195 NB02_np
+    ## 11 0.001879195 NB02_np
+    ## 12 0.001879195 NB02_np
+    ## 13 0.001610738 NB02_np
+    ## 14 0.001610738 NB02_np
+    ## 15 0.001610738 NB02_np
+    ## 16 0.001342282 NB02_np
+    ## 17 0.001342282 NB02_np
+    ## 18 0.001342282 NB02_np
+    ## 19 0.001342282 NB02_np
+    ## 20 0.001342282 NB02_np
+    ## 21 0.001342282 NB02_np
+    ## 22 0.001342282 NB02_np
+    ## 23 0.001073826 NB02_np
+    ## 24 0.001073826 NB02_np
+    ## 25 0.001073826 NB02_np
+    ## 26 0.001073826 NB02_np
+    ## 27 0.001073826 NB02_np
+    ## 28 0.001073826 NB02_np
+    ## 29 0.001073826 NB02_np
+    ## 30 0.001073826 NB02_np
+    ## 31 0.001073826 NB02_np
+    ## 32 0.001073826 NB02_np
+    ## 33 0.001073826 NB02_np
 
 References
 ==========
